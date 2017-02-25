@@ -40,13 +40,21 @@ class LoadBalancer (EventMixin):
     self.listenTo(connection)
     #init servers
     self.servers = [
-      self.Server('10.0.0.1', '00:00:00:00:00:01', 1),
-      self.Server('10.0.0.2', '00:00:00:00:00:02', 2)]
+      self.Server('10.1.0.1', '00:00:00:00:00:01', 1),
+      self.Server('10.1.0.2', '00:00:00:00:00:02', 2),
+      self.Server('10.1.0.3', '00:00:00:00:00:03', 3),
+      self.Server('10.1.0.4', '00:00:00:00:00:04', 4),
+      self.Server('10.1.0.5', '00:00:00:00:00:05', 5),
+      self.Server('10.1.0.6', '00:00:00:00:00:06', 6),
+      self.Server('10.1.0.7', '00:00:00:00:00:07', 7),
+      self.Server('10.1.0.8', '00:00:00:00:00:08', 8),
+      self.Server('10.1.0.9', '00:00:00:00:00:09', 9)]
     self.last_server = 0
 
   def get_next_server (self):
     #round robin selection
     self.last_server = (self.last_server + 1) % len(self.servers)
+    print self.servers[self.last_server]
     return self.servers[self.last_server] #last server is the most recent
 
   def handle_arp (self, packet, in_port):
@@ -129,10 +137,12 @@ class LoadBalancer (EventMixin):
     packet = event.parse()
     if packet.type == packet.ARP_TYPE:
       if packet.next.protodst != LB_IP:
+        print "bad arp"
         return
       self.handle_arp(packet, event.port)
     elif packet.type == packet.IP_TYPE:
       if packet.next.dstip != LB_IP:
+        print "bad ip"
         return
       self.handle_request(packet, event)
 
