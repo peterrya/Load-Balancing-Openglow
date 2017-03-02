@@ -21,8 +21,8 @@ IDLE_TOUT = 60 #seconds
 HARD_TOUT = 300 #seconds
 
 #HS load balancer
-LB_IP = IPAddr('10.0.0.254')
-LB_MAC = EthAddr('00:00:00:00:00:FE')
+LB_IP = IPAddr('10.1.0.254')
+LB_MAC = EthAddr('00:00:00:00:FE:00')
 
 #HS load balancer
 class LoadBalancer (EventMixin):
@@ -49,11 +49,15 @@ class LoadBalancer (EventMixin):
       self.Server('10.1.0.7', '00:00:00:00:00:07', 7),
       self.Server('10.1.0.8', '00:00:00:00:00:08', 8),
       self.Server('10.1.0.9', '00:00:00:00:00:09', 9)]
-    self.last_server = 0
 
-  def get_next_server (self):
-    #round robin selection
-    self.last_server = (self.last_server + 1) % len(self.servers)
+  def get_server (self, packet):
+    #hash based selection
+    newserv = str.encode(str(packet.next.srcip))	#get hash of packet source ip
+    servhash = hashlib.md5(newserv).hexdigest()
+    hval = int(servhash, 16)		#get last digit of hash
+    hval =  hval % 10
+
+    self.last_server = hval % len(self.servers)
     print self.servers[self.last_server]
     return self.servers[self.last_server] #last server is the most recent
 
@@ -84,10 +88,10 @@ class LoadBalancer (EventMixin):
     msg.in_port = in_port
     self.connection.send(msg)
 
-  def handle_request (self, packet, event):
+  def handle_request (self, packet, event, src_ip, src_mac):
     print "Other packet"
     #get server to handle request
-    server = self.get_next_server()
+    server = self.get_server(packet)
 
     #install reverse rule from server to client
     msg = of.ofp_flow_mod()
@@ -104,8 +108,8 @@ class LoadBalancer (EventMixin):
     msg.match.nw_dst = packet.next.srcip
 
     #Set src IP and MAC to LB and forward packet to client
-    msg.actions.append(of.ofp_action_nw_addr.set_src(LB_IP))
-    msg.actions.append(of.ofp_action_dl_addr.set_src(LB_MAC))
+    msg.actions.append(of.ofp_action_nw_addr.set_src(src_ip))
+    msg.actions.append(of.ofp_action_dl_addr.set_src(src_mac))
     msg.actions.append(of.ofp_action_output(port = event.port))
 
     self.connection.send(msg)
@@ -120,10 +124,10 @@ class LoadBalancer (EventMixin):
     #set matching
     msg.match.in_port = event.port
     msg.match.dl_src = packet.src
-    msg.match.dl_dst = LB_MAC
+    msg.match.dl_dst = src_mac
     msg.match.dl_type = ethernet.IP_TYPE
     msg.match.nw_src = packet.next.srcip
-    msg.match.nw_dst = LB_IP
+    msg.match.nw_dst = src_ip
 
     #actions
     msg.actions.append(of.ofp_action_nw_addr.set_dst(server.ip))
@@ -135,16 +139,18 @@ class LoadBalancer (EventMixin):
   def _handle_PacketIn (self, event):
     print "Packet in "
     packet = event.parse()
-    if packet.type == packet.ARP_TYPE:
-      if packet.next.protodst != LB_IP:
-        print "bad arp"
-        return
-      self.handle_arp(packet, event.port)
-    elif packet.type == packet.IP_TYPE:
+    if 1==1:
       if packet.next.dstip != LB_IP:
-        print "bad ip"
-        return
-      self.handle_request(packet, event)
+        servip = re.compile("00:00:00:00:00:0[0-9]")
+        print "src - ", str(packet.dst)
+    	if servip.match(str(packet.dst)):		#check if packet is going to a server
+	  print "to server"
+	  self.handle_request(packet, event, packet.next.dstip, packet.dst)
+	  return
+        else:
+	  print "bad ip"
+          return
+      self.handle_request(packet, event, LB_IP, LB_MAC)
 
 
 def launch ():
@@ -173,7 +179,7 @@ class Tutorial (object):
   """
   A Tutorial object is created for each switch that connects.
   A Connection object for that switch is passed to the __init__ function.
-  """
+ 
   def __init__ (self, connection):
     # Keep track of the connection to the switch so that we can
     # send it messages!
@@ -188,11 +194,11 @@ class Tutorial (object):
 
 
   def resend_packet (self, packet_in, out_port):
-    """
+   
     Instructs the switch to resend a packet that it had sent to us.
     "packet_in" is the ofp_packet_in object the switch had sent to the
     controller due to a table-miss.
-    """
+    
     msg = of.ofp_packet_out()
     msg.data = packet_in
 
@@ -204,9 +210,9 @@ class Tutorial (object):
     self.connection.send(msg)
  
   def act_like_switch (self, packet, packet_in):
-    """
+    
     Implement switch-like behavior.
-    """
+   
     # Here's some psuedocode to start you off implementing a learning
     # switch.  You'll need to rewrite it as real Python code.
     
