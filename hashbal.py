@@ -139,7 +139,7 @@ class LoadBalancer (EventMixin):
   def _handle_PacketIn (self, event):
     print "Packet in "
     packet = event.parse()
-    if 1==1:
+    if packet.type != packet.ARP_TYPE:
       if packet.next.dstip != LB_IP:
         servip = re.compile("00:00:00:00:00:0[0-9]")
         print "src - ", str(packet.dst)
@@ -151,6 +151,11 @@ class LoadBalancer (EventMixin):
 	  print "bad ip"
           return
       self.handle_request(packet, event, LB_IP, LB_MAC)
+    else:
+      if packet.next.protodst != LB_IP:
+         print "bad arp"
+         return
+      self.handle_arp(packet, event.port)
 
 
 def launch ():
