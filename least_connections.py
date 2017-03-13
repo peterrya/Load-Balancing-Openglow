@@ -36,6 +36,7 @@ class LoadBalancer (EventMixin):
       self.mac = EthAddr(mac)
       self.port = port
       self.conn = 0
+      self.cliList = []
 
     def __str__ (self):
       return','.join([str(self.ip), str(self.mac), str(self.port), str(self.conn)])
@@ -105,12 +106,15 @@ class LoadBalancer (EventMixin):
 
     #print "Other packet"
     #get server to handle request
-    if str(packet.src) in self.climac_to_servport:
+    if str(packet.src) in self.climac_to_servport: 	#client has connected to a server
       server = self.servers[self.climac_to_servport[str(packet.src)] - 1]
-      server.conn += 1
-    else:
+      if packet.src not in server.cliList:
+        server.conn += 1
+        server.cliList.append(packet.src)
+    else:		#client has not connected to a server before
       server = self.get_server(packet)
       self.climac_to_servport[str(packet.src)] = server.port
+      server.cliList.append(packet.src)
     print server
 
     #install reverse rule from server to client
@@ -165,9 +169,11 @@ class LoadBalancer (EventMixin):
     msg =  event.ofp
     servIP = msg.match.nw_src
     #check if servIP is a server IP
+
     
     for curr_serv in self.servers:
       if curr_serv.ip == servIP:
+        curr_serv.cliList.remove(msg.match.dl_dst) 	#remove client from server cliList
         curr_serv.conn -= 1
         #TODO DELETE DEBUG STATEMENT
         print ("Connection removed from server: " + curr_serv.short_str())
@@ -209,6 +215,7 @@ class LoadBalancer (EventMixin):
 	  self.handle_request(packet, event, packet.next.dstip, packet.dst)
 	  return
         else:
+          print self.climac_to_port
 	  self.resend_packet(event.ofp, self.climac_to_port[str(packet.dst)])
           return
       self.handle_request(packet, event, LB_IP, LB_MAC)
