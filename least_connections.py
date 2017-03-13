@@ -58,6 +58,7 @@ class LoadBalancer (EventMixin):
       self.Server('10.1.0.8', '00:00:00:00:00:08', 8),
       self.Server('10.1.0.9', '00:00:00:00:00:09', 9)]
     self.climac_to_port = {}
+    self.climac_to_servport = {}
   
   def get_server (self, packet):
     #least connections selection
@@ -104,7 +105,13 @@ class LoadBalancer (EventMixin):
 
     #print "Other packet"
     #get server to handle request
-    server = self.get_server(packet)
+    if str(packet.src) in self.climac_to_servport:
+      server = self.servers[self.climac_to_servport[str(packet.src)] - 1]
+      server.conn += 1
+    else:
+      server = self.get_server(packet)
+      self.climac_to_servport[str(packet.src)] = server.port
+    print server
 
     #install reverse rule from server to client
     msg = of.ofp_flow_mod()
@@ -133,7 +140,7 @@ class LoadBalancer (EventMixin):
 
     #install forward rule from server to client
     msg = of.ofp_flow_mod()
-    msg.idle_timeout = 0
+    msg.idle_timeout = IDLE_TOUT
     msg.hard_timeout = HARD_TOUT
     msg.buffer_id = None
     msg.data = event.ofp #forwards packet
@@ -165,13 +172,14 @@ class LoadBalancer (EventMixin):
         #TODO DELETE DEBUG STATEMENT
         print ("Connection removed from server: " + curr_serv.short_str())
         break
+    """
     print msg.match.dl_dst
     remmsg = of.ofp_flow_mod()
     remmsg.match.dl_src = str(msg.match.dl_dst)
     remmsg.command = of.OFPFC_DELETE_STRICT
     print "sending it"
     self.connection.send(remmsg)
-    
+    """
     #self.connection.send(of.ofp_flow_mod(command=of.OFPFC_DELETE_STRICT,action=of.ofp_action_output(port=3),priority=32,match=of.ofp_match(dl_src="00:00:00:00:00:0c")))  
     return 
      
